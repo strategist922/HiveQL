@@ -106,11 +106,11 @@ where row_number(cityid) <= 25
 
 create table  if not exists mwt_keyword_hot_update_matched(keyword string,cityid int, score float);
 insert overwrite table mwt_keyword_hot_update_matched
-select if (t.keyword is null,tt.keyword, t.shopname) as key, tt.cityid as cityid,  tt.count as score from
+select if (t.referer is null,tt.keyword, t.shopname) as key, tt.cityid as cityid,  tt.count as score from
 mwt_keyword_hot_update tt
 left outer join
-mwt_keyword_refer_match_new t
-on t.cityid = tt.cityid and t.keyword = tt.keyword
+(SELECT * FROM mwt_keyword_refer_count WHERE SCORE >0.5) t
+on t.cityid = tt.cityid and t.referer = tt.keyword
 sort by cityid, score desc
 ;
 

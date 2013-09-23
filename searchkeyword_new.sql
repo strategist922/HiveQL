@@ -11,30 +11,13 @@ create table if not exists mwt_keyword_recent(guid string, city int, keyword str
 insert overwrite table mwt_keyword_recent
 SELECT guid, city, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword, 1, dt
 FROM default.hippolog
-where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
+--where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
+where dt >= 'TIMELAST'
 and LOWER(path) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(path) regexp '/search/keyword/[0-9]+/.+/'
 DISTRIBUTE BY city, keyword
 sort by guid
 ;
-
--- get shopcv_recent
-create table if not exists mwt_shopcv_recent(userid int , shopid int, count int);
-
-INSERT OVERWRITE TABLE mwt_shopcv_recent
-select b.userid as userid, a.shopid as shopid, count(shopid) as c from
-(SELECT distinct guid,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
-FROM default.hippolog
-WHERE dt>= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),2)
-and LOWER(path) regexp '^/shop/.+'
-and not LOWER(path) regexp '^/shop/[0-9]+/photos'
-and page_id = 12
-) a
-inner join mainuserid b
-on a.guid = b.guid
-group by b.userid , a.shopid
-DISTRIBUTE BY userid
-sort by c desc;
 
 create table shopcv_view_user (UserID int , shopid int)
 insert overwrite table shopcv_view_user
@@ -211,8 +194,7 @@ create table mwt_keyword_refer (cityid int , shopid int ,referer string);
 insert overwrite table mwt_keyword_refer
 select city , regexp_extract(LOWER(path),'^/shop/([0-9]+)',1)  as shopid ,  regexp_extract(LOWER(referer),'/search/keyword/[0-9]+/0_(.+)',1) as re
 from default.hippolog
-where 
-where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
+where dt >= 'TIMELAST'
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and  LOWER(referer) regexp '/search/keyword/[0-9]+/0_'
@@ -222,7 +204,7 @@ sort by city
 ;
 
 
-add file reducer_keyword.py;
+add file /data/home/mainsite_dev/reducer_keyword.py;
 
 insert overwrite table mwt_keyword_refer
 select * from(
@@ -231,18 +213,23 @@ reduce t.cityid, t.shop, t.referer
 using 'reducer_keyword.py' as cityid, shop, referer) rt
 ;
 
--- 基础表 
-create table mwt_keyword_refer_count(cityid int, referer string, shopid int ,score float );
+-- 基础表
+
+create table mwt_keyword_refer_count(cityid int, referer string, shopname string ,score float );
 insert overwrite table mwt_keyword_refer_count
-select  cityid, referer, shop,  count(shop) as score
-from  mwt_keyword_refer
-group by cityid , referer, shop
+select  TT.cityid as cityid, TT.referer as referer, t.shop_name as shopname, count(t.shop_name) as score
+from
+mwt_keyword_refer TT
+INNER JOIN
+(select city_id, shop_id,shop_name from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 ) t
+ON TT.CITYID = t.city_id and TT.shop = t.shop_id
+group by TT.cityid , TT.referer, t.shop_name
 DISTRIBUTE by cityid, referer
 sort by cityid , referer, score desc
 ;
 
 insert overwrite table mwt_keyword_refer_count
-select tt.cityid as cityid, tt.referer as referer, tt.shopid as shopid , tt.score/(t.total+0.001) as score
+select tt.cityid as cityid, tt.referer as referer, tt.shopname as shopname , tt.score/(t.total+0.001) as score
 from 
 (
 select  cityid, referer, sum(score) as total from  mwt_keyword_refer_count group by cityid , referer) t
@@ -251,36 +238,36 @@ on t.cityid = tt.cityid and t.referer = tt.referer
 DISTRIBUTE by cityid, referer
 sort by cityid , referer, score desc
 ;
+--
+--create table if not exists mwt_keyword_refer_match(cityid int, keyword string, shopname string);
+--insert overwrite table mwt_keyword_refer_match
+--SELECT
+--select distinct t.city_id as cityid, tt.referer as keyword, t.shop_name as shopname
+--from
+--(select city_id, shop_id,shop_name from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 ) t
+--inner join
+--(select * from mwt_keyword_refer_count where score > 0.20 and length(referer) < 9) tt
+--on t.city_id = tt.cityid and t.shop_id = tt.shopid
+--;
 
-create table if not exists mwt_keyword_refer_match(cityid int, keyword string, shopname string);
-insert overwrite table mwt_keyword_refer_match
-select distinct t.city_id as cityid, tt.referer as keyword, t.shop_name as shopname
-from
-(select city_id, shop_id,shop_name from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 ) t
-inner join 
-(select * from mwt_keyword_refer_count where score > 0.20 and length(referer) < 9) tt
-on t.city_id = tt.cityid and t.shop_id = tt.shopid
-;
-
-create table if not exists mwt_keyword_refer_match_new (cityid int, keyword string, shopname string);
-insert overwrite table mwt_keyword_refer_match_new 
-select cityid, keyword,shopname from 
-(
-select cityid, keyword,shopname , rand() as score from mwt_keyword_refer_match 
-distribute by cityid, keyword
-sort by cityid, keyword, score desc
-)mt
-where row_number(cityid,keyword) = 1
-;
-
+--create table if not exists mwt_keyword_refer_match_new (cityid int, keyword string, shopname string);
+--insert overwrite table mwt_keyword_refer_match_new
+--select cityid, keyword,shopname from
+--(
+--select cityid, keyword,shopname , rand() as score from mwt_keyword_refer_match
+--distribute by cityid, keyword
+--sort by cityid, keyword, score desc
+--)mt
+--where row_number(cityid,keyword) = 1
+--;
 
 create table if not exists mwt_rec_keyword_matched like mwt_rec_keyword;
 insert overwrite table mwt_rec_keyword_matched
-select tt.userid as userid, tt.cityid as cityid, if (t.keyword is null,tt.keyword, t.shopname) as key, tt.score as score from
+select tt.userid as userid, tt.cityid as cityid, if (t.referer is null,tt.keyword, t.shopname) as key, tt.score as score from
 mwt_rec_keyword tt
 left outer join
-mwt_keyword_refer_match_new t
-on t.cityid = tt.cityid and t.keyword = tt.keyword
+(SELECT * FROM mwt_keyword_refer_count WHERE SCORE >0.5) t
+on t.cityid = tt.cityid and t.referer = tt.keyword
 ;
 
 insert overwrite table mwt_rec_keyword_matched
@@ -297,6 +284,39 @@ insert overwrite table mwt_rec_keyword_matched
 select * from mwt_rec_keyword_matched
 where length(keyword) <= 9 
 or keyword regexp '^[\\w\\s]+$'
+;
+
+
+-- get shopcv_recent
+create table if not exists mwt_shopcv_recent(userid int , shopid int, count int);
+INSERT OVERWRITE TABLE mwt_shopcv_recent
+select b.userid as userid, a.shopid as shopid, count(shopid) as c from
+(SELECT distinct guid,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
+FROM default.hippolog
+WHERE dt>= 'TIMENOW'
+and LOWER(path) regexp '^/shop/.+'
+and not LOWER(path) regexp '^/shop/[0-9]+/photos'
+and page_id = 12
+) a
+inner join mainuserid b
+on a.guid = b.guid
+group by b.userid , a.shopid
+DISTRIBUTE BY userid
+sort by c desc;
+
+
+
+
+CREATE TABLE IF NOT EXISTS mwt_rec_keyword_byshopcv LIKE mwt_rec_keyword;
+INSERT OVERWRITE TABLE mwt_rec_keyword_byshopcv
+SELECT B.cityid AS cityid, A.USERID AS USERID, B.REFERER AS KEYWORD , SUM(A.COUNT* B.SCORE) AS score  FROM
+(SELECT * FROM mwt_shopcv_recent WHERE COUNT > 1 )A
+INNER JOIN
+(SELECT * from mwt_keyword_refer_count where score > 0.20 and length(referer) < 9) B
+ON A.SHOPID = B.SHOPID
+GROUP BY B.CITYID,A.USERID, B.REFERER
+DISTRIBUTE BY  userid , cityid
+sort by userid ,cityid ,score desc
 ;
 
 
