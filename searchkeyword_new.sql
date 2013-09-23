@@ -1,3 +1,6 @@
+-- 搜索推荐词
+--
+
 use www;
 set mapred.reduce.tasks=256;
 set hive.exec.reducers.bytes.per.reducer=1000000;
@@ -8,12 +11,35 @@ create table if not exists mwt_keyword_recent(guid string, city int, keyword str
 insert overwrite table mwt_keyword_recent
 SELECT guid, city, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword, 1, dt
 FROM default.hippolog
-where dt >= 'TIMELAST'
+where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
 and LOWER(path) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(path) regexp '/search/keyword/[0-9]+/.+/'
 DISTRIBUTE BY city, keyword
 sort by guid
 ;
+
+-- get shopcv_recent
+create table if not exists mwt_shopcv_recent(userid int , shopid int, count int);
+
+INSERT OVERWRITE TABLE mwt_shopcv_recent
+select b.userid as userid, a.shopid as shopid, count(shopid) as c from
+(SELECT distinct guid,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
+FROM default.hippolog
+WHERE dt>= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),2)
+and LOWER(path) regexp '^/shop/.+'
+and not LOWER(path) regexp '^/shop/[0-9]+/photos'
+and page_id = 12
+) a
+inner join mainuserid b
+on a.guid = b.guid
+group by b.userid , a.shopid
+DISTRIBUTE BY userid
+sort by c desc;
+
+create table shopcv_view_user (UserID int , shopid int)
+insert overwrite table shopcv_view_user
+select mainuserid.UserID , t.shopid from mainuserid inner join shopcv_view as t
+on mainuserid.guid = shopcv_view.guid
 
 -- guid to userid
 create table if not exists mwt_user_keyword_recent(userid int, city int, keyword string, count float, dt string);
@@ -186,8 +212,7 @@ insert overwrite table mwt_keyword_refer
 select city , regexp_extract(LOWER(path),'^/shop/([0-9]+)',1)  as shopid ,  regexp_extract(LOWER(referer),'/search/keyword/[0-9]+/0_(.+)',1) as re
 from default.hippolog
 where 
-where dt >= 'TIMELAST'
-and dt <= 'TIMENOW'
+where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and  LOWER(referer) regexp '/search/keyword/[0-9]+/0_'
