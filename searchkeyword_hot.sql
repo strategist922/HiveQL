@@ -68,7 +68,8 @@ sort by cityid, c desc
 
 create table if not exists mwt_keyword_hot_new_tf(cityid int, keyword string , score float);
 insert overwrite table mwt_keyword_hot_new_tf
-select  tt.cityid, t.keyword, log10(t.count)*t.count/(tt.total + 0.00001) from 
+select  tt.cityid, t.keyword, t.count/(tt.total + 0.00001) from
+--select  tt.cityid, t.keyword, log10(t.count)*t.count/(tt.total + 0.00001) from
 (select cityid , sum(count) as total from mwt_keyword_hot_new group by cityid ) tt
 inner join 
 (select * from mwt_keyword_hot_new where count > 15 )t
