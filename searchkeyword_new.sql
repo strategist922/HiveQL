@@ -1,5 +1,14 @@
 -- 搜索推荐词
 --
+-- 一.数据来源： 1.前一天的访问记录 ，前10天得搜索记录
+--
+-- 二.基本推荐数据的生成: 搜索记录 ---> 搜了有搜， 浏览记录 ---->看了又看
+
+-- 三.结果的修正
+
+-- 补增      1.浏览商户的相似商户名
+
+-- 过滤      1.根据 搜索词--商户 的概率关系，将错误的搜索词对应到商户名
 
 use www;
 set mapred.reduce.tasks=256;
@@ -168,25 +177,25 @@ where row_number(userid,cityid) <= 80
 ;
 
 
-insert into table mwt_rec_keyword
-select * from (
-select userid,city,keyword,count from 
-mwt_user_keyword_recent_tf t
-distribute by userid,city
-sort by userid,city, count desc
-)mt
-where row_number(userid,city) <= 2
-;
-
-insert overwrite table mwt_rec_keyword
-select * from (
-select * from 
-mwt_rec_keyword
-distribute by userid,cityid
-sort by userid,cityid,score desc
-)mt
-where row_number(userid,cityid) <= 30
-;
+--insert into table mwt_rec_keyword
+--select * from (
+--select userid,city,keyword,count from
+--mwt_user_keyword_recent_tf t
+--distribute by userid,city
+--sort by userid,city, count desc
+--)mt
+--where row_number(userid,city) <= 2
+--;
+--
+--insert overwrite table mwt_rec_keyword
+--select * from (
+--select * from
+--mwt_rec_keyword
+--distribute by userid,cityid
+--sort by userid,cityid,score desc
+--)mt
+--where row_number(userid,cityid) <= 30
+--;
 
 ---------- searchkeyword  match to shopname ------------------------------
 
@@ -215,7 +224,7 @@ using 'reducer_keyword.py' as cityid, shop, referer) rt
 
 -- 基础表
 
-create table mwt_keyword_refer_count(cityid int, referer string, shopname string ,score float );
+create table if not exists mwt_keyword_refer_count(cityid int, referer string, shopname string ,score float );
 insert overwrite table mwt_keyword_refer_count
 select  TT.cityid as cityid, TT.referer as referer, t.shop_name as shopname, count(t.shop_name) as score
 from
@@ -238,28 +247,6 @@ on t.cityid = tt.cityid and t.referer = tt.referer
 DISTRIBUTE by cityid, referer
 sort by cityid , referer, score desc
 ;
---
---create table if not exists mwt_keyword_refer_match(cityid int, keyword string, shopname string);
---insert overwrite table mwt_keyword_refer_match
---SELECT
---select distinct t.city_id as cityid, tt.referer as keyword, t.shop_name as shopname
---from
---(select city_id, shop_id,shop_name from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 ) t
---inner join
---(select * from mwt_keyword_refer_count where score > 0.20 and length(referer) < 9) tt
---on t.city_id = tt.cityid and t.shop_id = tt.shopid
---;
-
---create table if not exists mwt_keyword_refer_match_new (cityid int, keyword string, shopname string);
---insert overwrite table mwt_keyword_refer_match_new
---select cityid, keyword,shopname from
---(
---select cityid, keyword,shopname , rand() as score from mwt_keyword_refer_match
---distribute by cityid, keyword
---sort by cityid, keyword, score desc
---)mt
---where row_number(cityid,keyword) = 1
---;
 
 create table if not exists mwt_rec_keyword_matched like mwt_rec_keyword;
 insert overwrite table mwt_rec_keyword_matched
@@ -284,9 +271,12 @@ insert overwrite table mwt_rec_keyword_matched
 select * from mwt_rec_keyword_matched
 where length(keyword) <= 9 
 or keyword regexp '^[\\w\\s]+$'
+distribute by userid , cityid
+sort by userid ,cityid ,score desc
 ;
 
-
+----------------------------------------------------------------------------------
+--根据访问记录推荐一部分
 -- get shopcv_recent
 create table if not exists mwt_shopcv_recent(userid int , shopid int, count int);
 INSERT OVERWRITE TABLE mwt_shopcv_recent
@@ -304,26 +294,61 @@ group by b.userid , a.shopid
 DISTRIBUTE BY userid
 sort by c desc;
 
-
-
-
-CREATE TABLE IF NOT EXISTS mwt_rec_keyword_byshopcv LIKE mwt_rec_keyword;
 INSERT OVERWRITE TABLE mwt_rec_keyword_byshopcv
-SELECT B.cityid AS cityid, A.USERID AS USERID, B.REFERER AS KEYWORD , SUM(A.COUNT* B.SCORE) AS score  FROM
-(SELECT * FROM mwt_shopcv_recent WHERE COUNT > 1 )A
+select t3.userid as userid, t4.city_id as cityid, t4.shop_name as keyword, sum(t3.score) as score from
+(select shop_id,shop_name,city_id from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 and length(shop_name) < 6 ) t4
+inner join
+(
+SELECT t1.userid as userid, t2.sid2 as shopid, sum(t1.count * t2.rank) score
+FROM mwt_shopcv_recent t1
 INNER JOIN
-(SELECT * from mwt_keyword_refer_count where score > 0.20 and length(referer) < 9) B
-ON A.SHOPID = B.SHOPID
-GROUP BY B.CITYID,A.USERID, B.REFERER
-DISTRIBUTE BY  userid , cityid
-sort by userid ,cityid ,score desc
+shopcv_shopcvrank t2
+on t1.shopid = t2.sid1
+group by t1.userid, t2.sid2
+)t3
+on t3.shopid = t4.shop_id
+group by t3.userid, t4.city_id, t4.shop_name
+distribute by userid, cityid,keyword
+sort by userid, cityid, score desc
 ;
 
+insert overwrite table mwt_rec_keyword_byshopcv
+select tt.userid, tt.cityid ,tt.keyword, tt.score/(t.avr+0.000001) as score
+from
+(select keyword, count(keyword) as avr from mwt_rec_keyword_byshopcv group by keyword ) t
+inner join
+mwt_rec_keyword_byshopcv tt
+on tt.keyword = t.keyword
+distribute by userid
+sort by userid, score desc
+;
 
+insert overwrite table mwt_rec_keyword_byshopcv
+select * from
+(
+select * from mwt_rec_keyword_byshopcv
+where length(keyword) <= 9
+distribute by userid
+sort by userid, cityid, score desc
+)
+mt
+where row_number(userid, cityid) <=5
+;
 
+-- 合并结果了
+insert into table mwt_rec_keyword_matched
+select * from mwt_rec_keyword_byshopcv
+;
 
-
-
+insert overwrite table mwt_rec_keyword_matched
+select * from
+(
+select * from mwt_rec_keyword_matched
+distribute by userid , cityid
+sort by userid, cityid, score desc
+)mt
+where row_number(userid, cityid) <= 25
+;
 
 
 
