@@ -117,6 +117,7 @@ inner join
 (select * from mwt_user_keyword_recent)c 
 on (b.city = c.city and b.userid = c.userid)
 where b.keyword <> c.keyword and c.dt >= b.dt
+and datediff(c.dt,b.dt) <= 1
 group by b.city, b.keyword , c.keyword
 distribute by cityid, sid1
 sort by cityid , sid1 , score desc
@@ -322,6 +323,23 @@ on tt.keyword = t.keyword
 distribute by userid
 sort by userid, score desc
 ;
+
+insert overwrite table mwt_rec_keyword_byshopcv
+select mt1.userid as userid, mt1.cityid as cityid, mt1.keyword as keyword, mt1.score as score from
+mwt_rec_keyword_byshopcv mt1
+left outer join
+(SELECT tt.userid as userid, t.shop_name as shopname from
+(select shop_id,shop_name,city_id from bi.dpdim_dp_shop where hp_valid_end_dt = "3000-12-31"  and  star >= 30 and power > 3 and length(shop_name) < 6 ) t
+inner join
+mwt_shopcv_recent tt
+on tt.shopid = t.shop_id
+)mt
+on mt.userid = mt1.userid and mt.shopname = mt1.keyword
+where mt.shopname is null
+distribute by userid
+sort by userid , cityid, score desc
+;
+
 
 insert overwrite table mwt_rec_keyword_byshopcv
 select * from

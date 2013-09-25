@@ -113,7 +113,7 @@ where row_number(deviceid, cityid) <= 300
 insert overwrite table mobile_shoprank_cv_new
 select tt.deviceid, tt.cityid ,tt.shopid, tt.rank/(t.avr+0.000001) as rank
 from
-(select shopid, avg(rank) as avr from mobile_shoprank_cv_new group by shopid ) t
+(select shopid, log10(count(shopid)) as avr from mobile_shoprank_cv_new group by shopid ) t
 inner join
 mobile_shoprank_cv_new tt
 on tt.shopid = t.shopid 
