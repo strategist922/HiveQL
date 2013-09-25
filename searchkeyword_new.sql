@@ -13,7 +13,7 @@
 use www;
 set mapred.reduce.tasks=256;
 set hive.exec.reducers.bytes.per.reducer=1000000;
-add file reducer_keyword_recent.py;
+add file /data/home/mainsite_dev/reducer_keyword_recent.py;
 
 -- get searchword record
 create table if not exists mwt_keyword_recent(guid string, city int, keyword string, count float, dt string);
