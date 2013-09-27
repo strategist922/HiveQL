@@ -28,11 +28,6 @@ DISTRIBUTE BY city, keyword
 sort by guid
 ;
 
-create table shopcv_view_user (UserID int , shopid int)
-insert overwrite table shopcv_view_user
-select mainuserid.UserID , t.shopid from mainuserid inner join shopcv_view as t
-on mainuserid.guid = shopcv_view.guid
-
 -- guid to userid
 create table if not exists mwt_user_keyword_recent(userid int, city int, keyword string, count float, dt string);
 insert overwrite table mwt_user_keyword_recent
