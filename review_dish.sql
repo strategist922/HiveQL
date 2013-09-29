@@ -40,3 +40,20 @@ where tags <> "没有"
 hive -e "select * from www.dp_review" > dp_review.txt
 hive -e "select shopid , tags from www.mwt_shop_dish"> shop_dish.txt
 hive -e "select concat(tags,' 1 n') from www.mwt_shop_dish group by tags having count(tags) > 1"> dish_dict_reduced.txt
+
+python test.py
+
+python dp_filter.py
+python mergeOO.py
+
+delete from dp_0926
+
+load data local infile "/Users/mantou/reducer_home/jieba/DISH_SCRIPT/dp_dish_0926_c.txt"
+into table dp_0926 (ShopID,Dish,DP,DpDetial,C)
+;
+load data local infile "/Users/mantou/reducer_home/jieba/DISH_SCRIPT/dp_dish_0926_b.txt"
+into table dp_0926 (ShopID,Dish,DP,DpDetial,C)
+;
+select shopid,dish,dp,dpdetial,sum(c) as cc from  dp_0926 group by shopid,dish,dp,dpdetial having cc > 0  into outfile '/Users/mantou/tmp2/dp_dish_0926_d.txt';
+
+python mergeOO.py

@@ -195,7 +195,7 @@ where row_number(userid,cityid) <= 80
 
 ---------- searchkeyword  match to shopname ------------------------------
 
-create table mwt_keyword_refer (cityid int , shopid int ,referer string);
+create table if not exists mwt_keyword_refer (cityid int , shopid int ,referer string);
 insert overwrite table mwt_keyword_refer
 select city , regexp_extract(LOWER(path),'^/shop/([0-9]+)',1)  as shopid ,  regexp_extract(LOWER(referer),'/search/keyword/[0-9]+/0_(.+)',1) as re
 from default.hippolog
