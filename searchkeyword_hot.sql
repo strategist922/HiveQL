@@ -6,14 +6,15 @@ set hive.exec.reducers.bytes.per.reducer=1000000;
 add file /data/home/mainsite_dev/reducer_keyword_hot.py;
 create table if not exists mwt_search_keyword_hot (guid string , cityid int , keyword string,dt string);
 INSERT OVERWRITE TABLE mwt_search_keyword_hot
-SELECT guid, city, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword,dt
-FROM default.hippolog
-WHERE  dt >= 'TIMELAST'
-and dt <= 'TIMENOW'
+SELECT guid_str, city_id, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword,hp_stat_time
+FROM bi.dpdw_traffic_base
+WHERE hp_log_type = 0
+and hp_stat_time >= 'TIMELAST'
+and hp_stat_time <= 'TIMENOW'
 and LOWER(path) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(path) regexp '/search/keyword/[0-9]+/.+/'
-DISTRIBUTE BY city, keyword
-sort by guid
+DISTRIBUTE BY city_id, keyword
+sort by guid_str
 ;
 
 create table if not exists mwt_user_search_keyword_hot(userid int , cityid int, keyword string,dt string);

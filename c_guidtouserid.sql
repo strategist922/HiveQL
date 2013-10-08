@@ -3,14 +3,21 @@
 use www;
 set mapred.reduce.tasks=256;
 
+insert into table guiduseridcount
+select guid_str, user_id, count(*) as c
+from bi.dpdw_traffic_base
+where hp_log_type = 0 and hp_stat_time >='TIMELAST' and user_id >0
+group by guid_str, user_id
+distribute by guid_str
+sort by guid_str ,c desc
+;
+
 insert overwrite table guiduseridcount
-select guid, user_id, count(*) as c
-from default.hippolog 
-where user_id >0 and dt>='2012-01-01' and
-group by guid, user_id
+select guid_str, user_id, count(*) as c from guiduseridcount
+group by guid, userid
 having c>1
-distribute by guid
-sort by guid,c desc
+distribute by guid_str
+sort by guid_str ,c desc
 ;
 
 -- old = new

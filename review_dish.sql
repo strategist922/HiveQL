@@ -47,7 +47,7 @@ python dp_filter.py
 python mergeOO.py
 
 delete from dp_0926
-
+;
 load data local infile "/Users/mantou/reducer_home/jieba/DISH_SCRIPT/dp_dish_0926_c.txt"
 into table dp_0926 (ShopID,Dish,DP,DpDetial,C)
 ;
@@ -56,4 +56,4 @@ into table dp_0926 (ShopID,Dish,DP,DpDetial,C)
 ;
 select shopid,dish,dp,dpdetial,sum(c) as cc from  dp_0926 group by shopid,dish,dp,dpdetial having cc > 0  into outfile '/Users/mantou/tmp2/dp_dish_0926_d.txt';
 
-python mergeOO.py
+python reducer_you.py

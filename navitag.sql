@@ -37,7 +37,7 @@ CREATE TABLE `DP_NaviUserTag` (
 -------------------------------------------------------------------
 -- 设计思路
 -- 用户访问数据分别来自主站和移动端
--- 步骤1： 从表hippolog 中统计用户近半年来访问过的商户, guid 对应 userid , 得到 shopcv_user_halfyear，包含各类商户;
+-- 步骤1： 从表dpdw_traffic_base中统计用户近半年来访问过的商户, guid 对应 userid , 得到 shopcv_user_halfyear，包含各类商户;
 -- 2：位置 根据商户的位置信息 ，得到用户的位置 标签 ，标签类型为 商圈 或者  行政区，累积标签出现的次数 ，作为tag对应的分数;
 -- 3：餐厅特色和餐厅氛围  提取所有的美食 类商户 ，得到商户的 shop_tag字段信息（从中分离出 餐厅特色 和 餐厅氛围 两项标签类型），avg_price字段
 -- 3.1：这两个标签 的内容 包括名字和分数都在同一个字段中，需要通过 python脚本进行解析；
@@ -51,14 +51,16 @@ CREATE TABLE `DP_NaviUserTag` (
 --包括所有商户
 create table if not exists mwt_shopcv_navitag(guid string , shopid int );
 INSERT OVERWRITE TABLE mwt_shopcv_navitag
-SELECT distinct guid,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
-FROM default.hippolog
-WHERE dt>='2012-09-01' 
+SELECT distinct guid_str,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
+FROM bi.dpdw_traffic_base
+WHERE
+hp_log_type = 0
+and hp_stat_time>='2012-09-01'
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and page_id = 12
 DISTRIBUTE BY shopid 
-sort by guid;
+sort by guid_str;
 
 --用户半年  共 79579641 条 ,   distinct * 76884549  distinct userid 5475467
 create table if not exists mwt_shopcv_navitag_userid(userID int, shopid int);

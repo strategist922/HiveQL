@@ -18,14 +18,15 @@ add file /data/home/mainsite_dev/reducer_keyword_recent.py;
 -- get searchword record
 create table if not exists mwt_keyword_recent(guid string, city int, keyword string, count float, dt string);
 insert overwrite table mwt_keyword_recent
-SELECT guid, city, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword, 1, dt
-FROM default.hippolog
---where dt >= date_sub(from_unixtime(unix_timestamp(),'yyyy-MM-dd'),15)
-where dt >= 'TIMELAST'
+SELECT guid_str, city_id, regexp_extract(LOWER(path),'/search/keyword/[0-9]+/0_(.+)',1) as keyword, 1, hp_stat_time
+FROM bi.dpdw_traffic_base
+where
+hp_log_type = 0
+and hp_stat_time >= 'TIMELAST'
 and LOWER(path) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(path) regexp '/search/keyword/[0-9]+/.+/'
-DISTRIBUTE BY city, keyword
-sort by guid
+DISTRIBUTE BY city_id, keyword
+sort by guid_str
 ;
 
 -- guid to userid
@@ -71,7 +72,7 @@ sort by cityid, count desc
 -- filer low frequency word (userid int, city int, keyword string, count float, dt string);
 insert overwrite table mwt_user_keyword_recent
 select tt.userid,tt.city,tt.keyword,tt.count,tt.dt from 
-(select * from mwt_keyword_count where count >= 100) t
+(select * from mwt_keyword_count where count >= 90) t
 inner join
 mwt_user_keyword_recent tt
 on t.cityid = tt.city and t.keyword = tt.keyword
@@ -172,40 +173,21 @@ sort by userid, cityid, score desc
 where row_number(userid,cityid) <= 80
 ;
 
-
---insert into table mwt_rec_keyword
---select * from (
---select userid,city,keyword,count from
---mwt_user_keyword_recent_tf t
---distribute by userid,city
---sort by userid,city, count desc
---)mt
---where row_number(userid,city) <= 2
---;
---
---insert overwrite table mwt_rec_keyword
---select * from (
---select * from
---mwt_rec_keyword
---distribute by userid,cityid
---sort by userid,cityid,score desc
---)mt
---where row_number(userid,cityid) <= 30
---;
-
 ---------- searchkeyword  match to shopname ------------------------------
 
 create table if not exists mwt_keyword_refer (cityid int , shopid int ,referer string);
 insert overwrite table mwt_keyword_refer
-select city , regexp_extract(LOWER(path),'^/shop/([0-9]+)',1)  as shopid ,  regexp_extract(LOWER(referer),'/search/keyword/[0-9]+/0_(.+)',1) as re
-from default.hippolog
-where dt >= 'TIMELAST'
+select city_id , regexp_extract(LOWER(path),'^/shop/([0-9]+)',1)  as shopid ,  regexp_extract(LOWER(referer),'/search/keyword/[0-9]+/0_(.+)',1) as re
+from bi.dpdw_traffic_base
+where
+hp_log_type = 0
+and hp_stat_time >= 'TIMELAST'
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and  LOWER(referer) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(referer) regexp '/search/keyword/[0-9]+/.+/'
-DISTRIBUTE BY city, re
-sort by city
+DISTRIBUTE BY city_id, re
+sort by city_id
 ;
 
 
@@ -277,9 +259,9 @@ sort by userid ,cityid ,score desc
 create table if not exists mwt_shopcv_recent(userid int , shopid int, count int);
 INSERT OVERWRITE TABLE mwt_shopcv_recent
 select b.userid as userid, a.shopid as shopid, count(shopid) as c from
-(SELECT distinct guid,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
-FROM default.hippolog
-WHERE dt>= 'TIMENOW'
+(SELECT distinct guid_str as guid ,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
+FROM bi.dpdw_traffic_base
+WHERE hp_stat_time>= 'TIMENOW'
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and page_id = 12
