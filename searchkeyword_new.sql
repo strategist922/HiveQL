@@ -182,6 +182,7 @@ from bi.dpdw_traffic_base
 where
 hp_log_type = 0
 and hp_stat_time >= 'TIMELAST'
+and city_id > 0
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and  LOWER(referer) regexp '/search/keyword/[0-9]+/0_'
@@ -261,7 +262,9 @@ INSERT OVERWRITE TABLE mwt_shopcv_recent
 select b.userid as userid, a.shopid as shopid, count(shopid) as c from
 (SELECT distinct guid_str as guid ,regexp_extract(LOWER(path),'^/shop/([0-9]+)',1) shopid
 FROM bi.dpdw_traffic_base
-WHERE hp_stat_time>= 'TIMENOW'
+WHERE
+hp_log_type = 0
+and hp_stat_time>= 'TIMENOW'
 and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and page_id = 12
@@ -270,7 +273,9 @@ inner join mainuserid b
 on a.guid = b.guid
 group by b.userid , a.shopid
 DISTRIBUTE BY userid
-sort by c desc;
+sort by c desc
+;
+
 
 INSERT OVERWRITE TABLE mwt_rec_keyword_byshopcv
 select t3.userid as userid, t4.city_id as cityid, t4.shop_name as keyword, sum(t3.score) as score from
