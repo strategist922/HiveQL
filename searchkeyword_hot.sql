@@ -18,6 +18,7 @@ and LOWER(path) regexp '^/shop/.+'
 and not LOWER(path) regexp '^/shop/[0-9]+/photos'
 and  LOWER(referer) regexp '/search/keyword/[0-9]+/0_'
 and not LOWER(referer) regexp '/search/keyword/[0-9]+/.+/'
+and if(user_id>0, 1, rand()) > 0.7
 DISTRIBUTE BY city_id
 sort by city_id
 ;
@@ -67,7 +68,7 @@ insert overwrite table mwt_keyword_hot_new_tf
 select  tt.cityid, t.keyword, t.count/(tt.total + 0.00001) from
 (select cityid , sum(count) as total from mwt_keyword_hot_new group by cityid ) tt
 inner join 
-(select * from mwt_keyword_hot_new where count > 7 )t
+(select * from mwt_keyword_hot_new where count >= 5 )t
 on t.cityid = tt.cityid 
 ;
 
